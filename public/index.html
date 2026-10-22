@@ -182,7 +182,37 @@
           }
         }
 
-        const snapshot = await getDocs(q);
+        let snapshot;
+        try {
+          snapshot = await getDocs(q);
+        } catch (err) {
+          // Graceful fallback if composite index is missing or still building in Firebase Console
+          if (err.message && (err.message.includes('index') || err.message.includes('FAILED_PRECONDITION') || err.message.includes('requires an index'))) {
+            console.warn('[Cinerolls] Composite index required. Using single-field fallback:', err.message);
+            const fallbackQ = query(loglinesCol, where('status', '==', 'live'));
+            const fallbackSnap = await getDocs(fallbackQ);
+            let docs = fallbackSnap.docs.slice();
+
+            if (currentTab === 'top') {
+              docs = docs.filter(d => Boolean(d.data().isRanked));
+              docs.sort((a, b) => (b.data().weightedScore || 0) - (a.data().weightedScore || 0));
+            } else {
+              docs.sort((a, b) => {
+                const tA = a.data().submittedAt ? a.data().submittedAt.toMillis() : 0;
+                const tB = b.data().submittedAt ? b.data().submittedAt.toMillis() : 0;
+                return tB - tA;
+              });
+            }
+
+            snapshot = {
+              empty: docs.length === 0,
+              docs: docs.slice(0, PAGE_SIZE),
+              forEach: function(cb) { this.docs.forEach(cb); }
+            };
+          } else {
+            throw err;
+          }
+        }
 
         if (isInitial) {
           statusMessage.classList.add('hidden');
