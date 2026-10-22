@@ -213,7 +213,7 @@
         }
       } catch (err) {
         console.error('Error fetching loglines:', err);
-        statusMessage.textContent = 'Failed to load loglines. Please try again later.';
+        statusMessage.textContent = `Failed to load loglines: ${err.message || 'Please try again later.'}`;
         statusMessage.className = 'status-box error-state';
       } finally {
         isLoading = false;

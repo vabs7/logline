@@ -240,8 +240,7 @@
       try {
         const q = query(
           collection(db, 'loglines'),
-          where('authorId', '==', uid),
-          orderBy('submittedAt', 'desc')
+          where('authorId', '==', uid)
         );
         const snapshot = await getDocs(q);
 
@@ -255,8 +254,13 @@
         loglinesList.innerHTML = '';
 
         const now = Date.now();
+        const docs = snapshot.docs.slice().sort((a, b) => {
+          const tA = a.data().submittedAt ? a.data().submittedAt.toMillis() : 0;
+          const tB = b.data().submittedAt ? b.data().submittedAt.toMillis() : 0;
+          return tB - tA;
+        });
 
-        snapshot.forEach(docSnap => {
+        docs.forEach(docSnap => {
           const d = docSnap.data();
           const id = docSnap.id;
           const avg = d.ratingCount > 0 ? (d.ratingSum / d.ratingCount).toFixed(1) : '-.-';
@@ -293,7 +297,7 @@
         attachActionListeners();
       } catch (err) {
         console.error('Error loading loglines:', err);
-        loglinesList.innerHTML = '<div class="status-box error-state">Failed to load your submissions.</div>';
+        loglinesList.innerHTML = `<div class="status-box error-state">Failed to load your submissions: ${escapeHtml(err.message)}</div>`;
       }
     }
 
