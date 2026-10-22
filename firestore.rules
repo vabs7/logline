@@ -17,11 +17,18 @@ service cloud.firestore {
     function isUserActive() {
       return isSignedIn() 
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status != 'suspended';
+        && (!('status' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data)
+            || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status != 'suspended');
     }
 
     function isLoglineAuthor(loglineId) {
-      return isSignedIn() && get(/databases/$(database)/documents/loglines/$(loglineId)).data.authorId == request.auth.uid;
+      return isSignedIn() && (
+        (exists(/databases/$(database)/documents/loglines/$(loglineId)) 
+         && get(/databases/$(database)/documents/loglines/$(loglineId)).data.authorId == request.auth.uid)
+        ||
+        (existsAfter(/databases/$(database)/documents/loglines/$(loglineId)) 
+         && getAfter(/databases/$(database)/documents/loglines/$(loglineId)).data.authorId == request.auth.uid)
+      );
     }
 
     function validRatingUpdate(loglineId) {
@@ -63,13 +70,13 @@ service cloud.firestore {
       allow read: if isOwner(uid) || isAdmin();
       allow create: if isOwner(uid) 
         && request.resource.data.status == 'active' 
-        && request.resource.data.keys().hasOnly(['status', 'createdAt', 'handle', 'lastSubmitAt']);
+        && request.resource.data.keys().hasOnly(['status', 'createdAt', 'handle', 'lastSubmitAt', 'updatedAt']);
       allow update: if isOwner(uid) 
-        && request.resource.data.status == resource.data.status 
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['handle', 'lastSubmitAt', 'updatedAt'])
+        && (!('status' in resource.data) || request.resource.data.status == resource.data.status)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['handle', 'lastSubmitAt', 'updatedAt', 'status'])
         && (request.resource.data.handle == null || (request.resource.data.handle is string && request.resource.data.handle.matches('^[a-zA-Z0-9_]{3,20}$')))
         && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['lastSubmitAt']) || (
-          (resource.data.lastSubmitAt == null || request.time >= resource.data.lastSubmitAt + duration.value(10, 'm'))
+          (!('lastSubmitAt' in resource.data) || resource.data.lastSubmitAt == null || request.time >= resource.data.lastSubmitAt + duration.value(10, 'm'))
           && request.resource.data.lastSubmitAt == request.time
         ));
       allow delete: if false;
@@ -98,12 +105,17 @@ service cloud.firestore {
         && request.resource.data.ratingSum == 0
         && request.resource.data.isRanked == false
         && (request.resource.data.weightedScore == 3.0 || request.resource.data.weightedScore == 3)
-        && request.resource.data.editableUntil == request.time + duration.value(24, 'h')
+        && request.resource.data.editableUntil is timestamp
+        && request.resource.data.editableUntil >= request.time
+        && request.resource.data.editableUntil <= request.time + duration.value(25, 'h')
         && getAfter(/databases/$(database)/documents/hashes/$(request.resource.data.contentHash)).data.loglineId == id
         && getAfter(/databases/$(database)/documents/hashes/$(request.resource.data.contentHash)).data.authorId == request.auth.uid
         && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.lastSubmitAt == request.time
-        && (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.lastSubmitAt == null 
-            || request.time >= get(/databases/$(database)/documents/users/$(request.auth.uid)).data.lastSubmitAt + duration.value(10, 'm'))
+        && (
+          !('lastSubmitAt' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data)
+          || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.lastSubmitAt == null 
+          || request.time >= get(/databases/$(database)/documents/users/$(request.auth.uid)).data.lastSubmitAt + duration.value(10, 'm')
+        )
         && request.resource.data.keys().hasOnly([
           'authorId', 'title', 'body', 'genre', 'format', 'comparables',
           'status', 'contentHash', 'submittedAt', 'editableUntil',

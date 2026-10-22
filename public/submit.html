@@ -315,10 +315,10 @@
         });
 
         // Update user lastSubmitAt
-        batch.update(userRef, {
+        batch.set(userRef, {
           lastSubmitAt: serverTimestamp(),
           updatedAt: serverTimestamp()
-        });
+        }, { merge: true });
 
         await batch.commit();
 
