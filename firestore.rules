@@ -25,24 +25,26 @@ service cloud.firestore {
     }
 
     function validRatingUpdate(loglineId) {
-      let diff = request.resource.data.diff(resource.data);
-      let isRatingKeys = diff.affectedKeys().hasOnly(['ratingCount', 'ratingSum', 'weightedScore', 'isRanked', 'updatedAt']);
-      let raterIsOther = isSignedIn() && resource.data.authorId != request.auth.uid;
-      let isLive = resource.data.status == 'live';
       let ratingDocPath = /databases/$(database)/documents/loglines/$(loglineId)/ratings/$(request.auth.uid);
       let ratingAfter = getAfter(ratingDocPath).data;
-      let isNewRating = !exists(ratingDocPath);
+      let isNew = !exists(ratingDocPath);
 
-      let validCountDelta = isNewRating
-        ? (request.resource.data.ratingCount == resource.data.ratingCount + 1 && request.resource.data.ratingSum == resource.data.ratingSum + ratingAfter.score)
-        : (request.resource.data.ratingCount == resource.data.ratingCount && request.resource.data.ratingSum == resource.data.ratingSum + (ratingAfter.score - get(ratingDocPath).data.score));
+      let validDelta = isNew
+        ? (request.resource.data.ratingCount == resource.data.ratingCount + 1 
+           && request.resource.data.ratingSum == resource.data.ratingSum + ratingAfter.score)
+        : (request.resource.data.ratingCount == resource.data.ratingCount 
+           && request.resource.data.ratingSum == resource.data.ratingSum + (ratingAfter.score - get(ratingDocPath).data.score));
 
-      let expectedWeighted = (double(request.resource.data.ratingSum) + 30.0) / (double(request.resource.data.ratingCount) + 10.0);
-      let scoreDiff = request.resource.data.weightedScore - expectedWeighted;
-      let validScore = (scoreDiff >= -0.0001 && scoreDiff <= 0.0001);
-      let validRanked = request.resource.data.isRanked == (request.resource.data.ratingCount >= 10);
+      let expectedScore = (request.resource.data.ratingSum + 30.0) / (request.resource.data.ratingCount + 10.0);
+      let scoreDiff = request.resource.data.weightedScore - expectedScore;
 
-      return isRatingKeys && raterIsOther && isLive && validCountDelta && validScore && validRanked;
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ratingCount', 'ratingSum', 'weightedScore', 'isRanked', 'updatedAt'])
+        && isSignedIn()
+        && resource.data.authorId != request.auth.uid
+        && resource.data.status == 'live'
+        && validDelta
+        && (scoreDiff >= -0.0001 && scoreDiff <= 0.0001)
+        && request.resource.data.isRanked == (request.resource.data.ratingCount >= 10);
     }
 
     // Default deny all client writes
