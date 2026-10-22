@@ -1,0 +1,177 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    function isUserActive() {
+      return isSignedIn() 
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status != 'suspended';
+    }
+
+    function isLoglineAuthor(loglineId) {
+      return isSignedIn() && get(/databases/$(database)/documents/loglines/$(loglineId)).data.authorId == request.auth.uid;
+    }
+
+    function validRatingUpdate(loglineId) {
+      let diff = request.resource.data.diff(resource.data);
+      let isRatingKeys = diff.affectedKeys().hasOnly(['ratingCount', 'ratingSum', 'weightedScore', 'isRanked', 'updatedAt']);
+      let raterIsOther = isSignedIn() && resource.data.authorId != request.auth.uid;
+      let isLive = resource.data.status == 'live';
+      let ratingDocPath = /databases/$(database)/documents/loglines/$(loglineId)/ratings/$(request.auth.uid);
+      let ratingAfter = getAfter(ratingDocPath).data;
+      let isNewRating = !exists(ratingDocPath);
+
+      let validCountDelta = isNewRating
+        ? (request.resource.data.ratingCount == resource.data.ratingCount + 1 && request.resource.data.ratingSum == resource.data.ratingSum + ratingAfter.score)
+        : (request.resource.data.ratingCount == resource.data.ratingCount && request.resource.data.ratingSum == resource.data.ratingSum + (ratingAfter.score - get(ratingDocPath).data.score));
+
+      let expectedWeighted = (double(request.resource.data.ratingSum) + 30.0) / (double(request.resource.data.ratingCount) + 10.0);
+      let scoreDiff = request.resource.data.weightedScore - expectedWeighted;
+      let validScore = (scoreDiff >= -0.0001 && scoreDiff <= 0.0001);
+      let validRanked = request.resource.data.isRanked == (request.resource.data.ratingCount >= 10);
+
+      return isRatingKeys && raterIsOther && isLive && validCountDelta && validScore && validRanked;
+    }
+
+    // Default deny all client writes
+    match /{document=**} {
+      allow write: if false;
+    }
+
+    // admins/{uid}: User can read own doc; no client write
+    match /admins/{uid} {
+      allow read: if isOwner(uid);
+      allow write: if false;
+    }
+
+    // users/{uid}: Owner can read; client creates with status active; can only update handle and lastSubmitAt
+    match /users/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow create: if isOwner(uid) 
+        && request.resource.data.status == 'active' 
+        && request.resource.data.keys().hasOnly(['status', 'createdAt', 'handle', 'lastSubmitAt']);
+      allow update: if isOwner(uid) 
+        && request.resource.data.status == resource.data.status 
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['handle', 'lastSubmitAt', 'updatedAt'])
+        && (request.resource.data.handle == null || (request.resource.data.handle is string && request.resource.data.handle.matches('^[a-zA-Z0-9_]{3,20}$')))
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['lastSubmitAt']) || (
+          (resource.data.lastSubmitAt == null || request.time >= resource.data.lastSubmitAt + duration.value(10, 'm'))
+          && request.resource.data.lastSubmitAt == request.time
+        ));
+      allow delete: if false;
+    }
+
+    // hashes/{contentHash}: Author creates with batch, cannot update, author can delete
+    match /hashes/{contentHash} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn()
+        && request.resource.data.authorId == request.auth.uid
+        && !exists(/databases/$(database)/documents/hashes/$(contentHash))
+        && request.resource.data.keys().hasOnly(['authorId', 'loglineId', 'createdAt']);
+      allow update: if false;
+      allow delete: if isSignedIn() && resource.data.authorId == request.auth.uid;
+    }
+
+    // loglines/{id}
+    match /loglines/{id} {
+      allow read: if resource.data.status == 'live' 
+                  || (isSignedIn() && (request.auth.uid == resource.data.authorId || isAdmin()));
+
+      allow create: if isUserActive()
+        && request.resource.data.authorId == request.auth.uid
+        && request.resource.data.status == 'live'
+        && request.resource.data.ratingCount == 0
+        && request.resource.data.ratingSum == 0
+        && request.resource.data.isRanked == false
+        && (request.resource.data.weightedScore == 3.0 || request.resource.data.weightedScore == 3)
+        && request.resource.data.editableUntil == request.time + duration.value(24, 'h')
+        && getAfter(/databases/$(database)/documents/hashes/$(request.resource.data.contentHash)).data.loglineId == id
+        && getAfter(/databases/$(database)/documents/hashes/$(request.resource.data.contentHash)).data.authorId == request.auth.uid
+        && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.lastSubmitAt == request.time
+        && (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.lastSubmitAt == null 
+            || request.time >= get(/databases/$(database)/documents/users/$(request.auth.uid)).data.lastSubmitAt + duration.value(10, 'm'))
+        && request.resource.data.keys().hasOnly([
+          'authorId', 'title', 'body', 'genre', 'format', 'comparables',
+          'status', 'contentHash', 'submittedAt', 'editableUntil',
+          'ratingCount', 'ratingSum', 'weightedScore', 'isRanked', 'updatedAt'
+        ]);
+
+      allow update: if (
+        // Author edit: body, contentHash, updatedAt while request.time < editableUntil
+        isOwner(resource.data.authorId)
+        && request.time < resource.data.editableUntil
+        && resource.data.status == 'live'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['body', 'contentHash', 'updatedAt'])
+        && getAfter(/databases/$(database)/documents/hashes/$(request.resource.data.contentHash)).data.loglineId == id
+      ) || (
+        // Author withdraw: status to withdrawn
+        isOwner(resource.data.authorId)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt'])
+        && request.resource.data.status == 'withdrawn'
+      ) || (
+        // Admin status change: live, hidden, or withdrawn
+        isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt'])
+        && request.resource.data.status in ['live', 'hidden', 'withdrawn']
+      ) || (
+        // Rating transaction update
+        validRatingUpdate(id)
+      );
+
+      allow delete: if false;
+
+      // loglines/{id}/revisions/{rid}
+      match /revisions/{rid} {
+        allow read: if isLoglineAuthor(id) || isAdmin();
+        allow create: if isLoglineAuthor(id) 
+          && request.resource.data.keys().hasOnly(['body', 'savedAt', 'revisionNumber']);
+        allow update, delete: if false;
+      }
+
+      // loglines/{id}/ratings/{uid}
+      match /ratings/{uid} {
+        allow read: if isSignedIn() && (request.auth.uid == uid || isLoglineAuthor(id) || isAdmin());
+        allow create, update: if isSignedIn() && request.auth.uid == uid
+          && get(/databases/$(database)/documents/loglines/$(id)).data.authorId != request.auth.uid
+          && get(/databases/$(database)/documents/loglines/$(id)).data.status == 'live'
+          && request.resource.data.score is int && request.resource.data.score >= 1 && request.resource.data.score <= 5
+          && (request.resource.data.reason == null || (request.resource.data.reason is string && request.resource.data.reason.size() <= 140))
+          && request.resource.data.keys().hasOnly(['score', 'reason', 'createdAt', 'updatedAt']);
+        allow delete: if false;
+      }
+
+      // loglines/{id}/reports/{uid}
+      match /reports/{uid} {
+        allow read: if isAdmin();
+        allow create: if isSignedIn() && request.auth.uid == uid
+          && get(/databases/$(database)/documents/loglines/$(id)).data.authorId != request.auth.uid
+          && request.resource.data.keys().hasOnly(['reason', 'createdAt', 'loglineId']);
+        allow update, delete: if false;
+      }
+    }
+
+    // Collection Group Query rule for reports: Admin only
+    match /{path=**}/reports/{uid} {
+      allow read: if isAdmin();
+    }
+
+    // outcomes/{id}: Verified are public; admin can read/create/update all
+    match /outcomes/{id} {
+      allow read: if resource.data.verified == true || isAdmin();
+      allow create, update: if isAdmin();
+      allow delete: if false;
+    }
+  }
+}

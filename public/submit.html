@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Submit a Logline - Cinerolls</title>
+  <meta name="description" content="Submit your movie logline on Cinerolls. One-sentence story pitches only, never scripts.">
+  <meta property="og:title" content="Submit a Logline - Cinerolls">
+  <meta property="og:site_name" content="Cinerolls">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-container">
+      <a href="index.html" class="logo">
+        <span class="logo-mark">🎬</span>
+        <span class="logo-text">Cinerolls</span>
+      </a>
+      <nav class="site-nav" aria-label="Main Navigation">
+        <a href="submit.html" class="btn btn-primary active">+ Submit Logline</a>
+        <div id="authNavSlot" class="auth-slot">
+          <a href="signin.html" class="btn btn-outline" id="authButton">Sign In</a>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <main class="site-main">
+    <div class="container form-page-container">
+      <div class="page-header">
+        <h1 class="page-title">Submit Your Logline</h1>
+        <p class="page-subtitle">Hook readers with a single, potent sentence. <strong>Never submit full scripts.</strong></p>
+      </div>
+
+      <div id="authGateNotice" class="status-box error-state hidden">
+        <p>You must be signed in to submit a logline.</p>
+        <p><a href="signin.html" class="btn btn-primary" style="margin-top: 0.75rem;">Sign In with Email</a></p>
+      </div>
+
+      <form id="submitForm" class="submission-form" novalidate>
+        <div class="form-group">
+          <label for="pitchTitle">Title <span class="required" aria-hidden="true">*</span></label>
+          <input
+            type="text"
+            id="pitchTitle"
+            name="pitchTitle"
+            class="form-input"
+            required
+            minlength="3"
+            maxlength="120"
+            placeholder="e.g. Inception, Arrival, The Truman Show"
+            aria-describedby="titleHelp"
+          >
+          <small id="titleHelp" class="form-help">3 to 120 characters.</small>
+        </div>
+
+        <div class="form-group">
+          <label for="pitchBody">Logline (One-sentence pitch) <span class="required" aria-hidden="true">*</span></label>
+          <textarea
+            id="pitchBody"
+            name="pitchBody"
+            class="form-input"
+            rows="4"
+            required
+            placeholder="When a troubled insomniac meets a slippery soap salesman, they form an underground fight club that evolves into something much more sinister."
+            aria-describedby="loglineHelp loglineCounter"
+          ></textarea>
+          <div class="form-help-row">
+            <small id="loglineHelp" class="form-help">Must be between 10 and 50 words.</small>
+            <div id="loglineCounter" class="word-counter" aria-live="polite">Words: <strong id="wordCountNum">0</strong> / 50 (min 10)</div>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label for="pitchGenre">Genre <span class="required" aria-hidden="true">*</span></label>
+            <select id="pitchGenre" name="pitchGenre" class="form-input" required>
+              <option value="" disabled selected>Select primary genre...</option>
+              <option value="drama">Drama</option>
+              <option value="comedy">Comedy</option>
+              <option value="horror">Horror</option>
+              <option value="thriller">Thriller</option>
+              <option value="sci-fi">Sci-Fi</option>
+              <option value="fantasy">Fantasy</option>
+              <option value="romance">Romance</option>
+              <option value="action">Action</option>
+              <option value="documentary">Documentary</option>
+              <option value="animation">Animation</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+
+          <div class="form-group flex-1">
+            <label for="pitchFormat">Format <span class="required" aria-hidden="true">*</span></label>
+            <select id="pitchFormat" name="pitchFormat" class="form-input" required>
+              <option value="" disabled selected>Select format...</option>
+              <option value="feature">Feature</option>
+              <option value="short">Short</option>
+              <option value="pilot">Pilot</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="pitchComparables">Comparable Films (Optional)</label>
+          <input
+            type="text"
+            id="pitchComparables"
+            name="pitchComparables"
+            class="form-input"
+            maxlength="200"
+            placeholder="e.g. Knives Out meets The White Lotus"
+            aria-describedby="comparablesHelp"
+          >
+          <small id="comparablesHelp" class="form-help">Max 200 characters. Give readers a tonal touchpoint.</small>
+        </div>
+
+        <div id="submitError" class="status-box error-state hidden" role="alert"></div>
+
+        <div class="form-actions">
+          <button type="submit" id="submitBtn" class="btn btn-primary btn-large">Post Logline</button>
+          <a href="index.html" class="btn btn-outline btn-large">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-container">
+      <p class="copyright">&copy; Cinerolls. Writers retain all rights to their loglines.</p>
+      <div class="footer-links">
+        <a href="terms.html">Terms of Service</a>
+        <span aria-hidden="true">•</span>
+        <a href="privacy.html">Privacy Policy</a>
+      </div>
+    </div>
+  </footer>
+
+  <script type="module">
+    import { db, auth } from './js/firebase-init.js';
+    import { doc, getDoc, setDoc, collection, writeBatch, serverTimestamp, Timestamp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+    import { onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
+    import { computeContentHash } from './js/hash.js';
+    import { initNav } from './js/nav.js';
+
+    initNav();
+
+    const submitForm = document.getElementById('submitForm');
+    const authGateNotice = document.getElementById('authGateNotice');
+    const pitchTitle = document.getElementById('pitchTitle');
+    const pitchBody = document.getElementById('pitchBody');
+    const pitchGenre = document.getElementById('pitchGenre');
+    const pitchFormat = document.getElementById('pitchFormat');
+    const pitchComparables = document.getElementById('pitchComparables');
+    const wordCountNum = document.getElementById('wordCountNum');
+    const loglineCounter = document.getElementById('loglineCounter');
+    const submitError = document.getElementById('submitError');
+    const submitBtn = document.getElementById('submitBtn');
+
+    onAuthStateChanged(auth, (user) => {
+      if (!user) {
+        submitForm.classList.add('hidden');
+        authGateNotice.classList.remove('hidden');
+      } else {
+        submitForm.classList.remove('hidden');
+        authGateNotice.classList.add('hidden');
+      }
+    });
+
+    function getWordCount(text) {
+      if (!text) return 0;
+      return text.trim().split(/\s+/).filter(Boolean).length;
+    }
+
+    pitchBody.addEventListener('input', () => {
+      const count = getWordCount(pitchBody.value);
+      wordCountNum.textContent = count;
+      if (count < 10 || count > 50) {
+        loglineCounter.classList.add('invalid');
+      } else {
+        loglineCounter.classList.remove('invalid');
+      }
+    });
+
+    submitForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      submitError.classList.add('hidden');
+
+      if (!auth.currentUser) {
+        window.location.href = 'signin.html';
+        return;
+      }
+
+      const uid = auth.currentUser.uid;
+      const title = pitchTitle.value.trim();
+      const body = pitchBody.value.trim();
+      const genre = pitchGenre.value;
+      const format = pitchFormat.value;
+      const comparables = pitchComparables.value.trim();
+
+      const words = getWordCount(body);
+
+      // Client-side validations
+      if (title.length < 3 || title.length > 120) {
+        showError('Title must be between 3 and 120 characters.');
+        pitchTitle.focus();
+        return;
+      }
+
+      if (words < 10 || words > 50) {
+        showError(`Logline must be between 10 and 50 words (currently ${words} words).`);
+        pitchBody.focus();
+        return;
+      }
+
+      if (!genre) {
+        showError('Please select a genre.');
+        pitchGenre.focus();
+        return;
+      }
+
+      if (!format) {
+        showError('Please select a format.');
+        pitchFormat.focus();
+        return;
+      }
+
+      if (comparables.length > 200) {
+        showError('Comparable films must not exceed 200 characters.');
+        pitchComparables.focus();
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Submitting...';
+
+      try {
+        // 1. Verify user document & check 10-minute throttle
+        const userRef = doc(db, 'users', uid);
+        const userSnap = await getDoc(userRef);
+
+        if (!userSnap.exists()) {
+          // Initialize active user document if missing
+          await setDoc(userRef, {
+            status: 'active',
+            createdAt: serverTimestamp(),
+            handle: null,
+            lastSubmitAt: null
+          });
+        } else {
+          const userData = userSnap.data();
+          if (userData.status === 'suspended') {
+            throw new Error('Your account is suspended. Submissions are disabled.');
+          }
+
+          if (userData.lastSubmitAt) {
+            const lastMs = userData.lastSubmitAt.toMillis();
+            const elapsedMs = Date.now() - lastMs;
+            const tenMinMs = 10 * 60 * 1000;
+            if (elapsedMs < tenMinMs) {
+              const remainingMin = Math.ceil((tenMinMs - elapsedMs) / (60 * 1000));
+              throw new Error(`Submission throttle: Please wait ${remainingMin} minute(s) before submitting another logline (limit: 1 per 10 minutes).`);
+            }
+          }
+        }
+
+        // 2. Compute SHA-256 hash using Web Crypto API
+        const contentHash = await computeContentHash(body);
+
+        // 3. Pre-check if hash already exists in hashes collection
+        const hashRef = doc(db, 'hashes', contentHash);
+        const hashSnap = await getDoc(hashRef);
+        if (hashSnap.exists()) {
+          throw new Error('A logline with identical or near-identical text already exists on Cinerolls.');
+        }
+
+        // 4. Batch commit logline, hash, revision 1, and user throttle
+        const batch = writeBatch(db);
+        const loglineRef = doc(collection(db, 'loglines'));
+        const rev1Ref = doc(collection(db, 'loglines', loglineRef.id, 'revisions'), 'rev_1');
+
+        const editableUntil = Timestamp.fromMillis(Date.now() + 24 * 60 * 60 * 1000);
+
+        // Hashes doc
+        batch.set(hashRef, {
+          authorId: uid,
+          loglineId: loglineRef.id,
+          createdAt: serverTimestamp()
+        });
+
+        // Logline doc
+        batch.set(loglineRef, {
+          authorId: uid,
+          title,
+          body,
+          genre,
+          format,
+          comparables,
+          status: 'live',
+          contentHash,
+          submittedAt: serverTimestamp(),
+          editableUntil,
+          ratingCount: 0,
+          ratingSum: 0,
+          weightedScore: 3.0,
+          isRanked: false,
+          updatedAt: serverTimestamp()
+        });
+
+        // Revision 1
+        batch.set(rev1Ref, {
+          body,
+          savedAt: serverTimestamp(),
+          revisionNumber: 1
+        });
+
+        // Update user lastSubmitAt
+        batch.update(userRef, {
+          lastSubmitAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        });
+
+        await batch.commit();
+
+        // Redirect to new logline page
+        window.location.href = `logline.html?id=${encodeURIComponent(loglineRef.id)}`;
+      } catch (err) {
+        console.error('Submission error:', err);
+        showError(err.message || 'Failed to submit logline. Please check your inputs and try again.');
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Post Logline';
+      }
+    });
+
+    function showError(msg) {
+      submitError.textContent = msg;
+      submitError.classList.remove('hidden');
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cinerolls - Discover and Rate Movie Loglines</title>
+  <meta name="description" content="Read one-sentence movie pitches from screenwriters and rate them on a 1–5 scale on Cinerolls.">
+  <meta property="og:title" content="Cinerolls - Discover and Rate Movie Loglines">
+  <meta property="og:site_name" content="Cinerolls">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-container">
+      <a href="index.html" class="logo">
+        <span class="logo-mark">🎬</span>
+        <span class="logo-text">Cinerolls</span>
+      </a>
+      <nav class="site-nav" aria-label="Main Navigation">
+        <a href="submit.html" class="btn btn-primary">+ Submit Logline</a>
+        <div id="authNavSlot" class="auth-slot">
+          <a href="signin.html" class="btn btn-outline" id="authButton">Sign In</a>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <main class="site-main">
+    <div class="container">
+      <section class="hero-section">
+        <h1 class="hero-title">Movie Loglines That Demand to Be Made</h1>
+        <p class="hero-subtitle">Read one-sentence pitches from screenwriters. Rate them on a 1–5 "Would you watch this?" scale.</p>
+      </section>
+
+      <div class="tabs-wrapper" role="tablist" aria-label="Logline Categories">
+        <button type="button" class="tab-btn active" role="tab" id="tabTop" aria-selected="true" aria-controls="feedSection">
+          Top Rated
+        </button>
+        <button type="button" class="tab-btn" role="tab" id="tabNew" aria-selected="false" aria-controls="feedSection">
+          New Submissions
+        </button>
+      </div>
+
+      <section id="feedSection" class="feed-section" role="tabpanel" aria-labelledby="tabTop">
+        <div id="loglineList" class="logline-grid" aria-live="polite">
+          <!-- Logline cards rendered dynamically -->
+        </div>
+
+        <div id="statusMessage" class="status-box hidden"></div>
+
+        <div class="pagination-container">
+          <button type="button" id="loadMoreBtn" class="btn btn-outline hidden">Load More</button>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-container">
+      <p class="copyright">&copy; Cinerolls. Writers retain all rights to their loglines.</p>
+      <div class="footer-links">
+        <a href="terms.html">Terms of Service</a>
+        <span aria-hidden="true">•</span>
+        <a href="privacy.html">Privacy Policy</a>
+      </div>
+    </div>
+  </footer>
+
+  <script type="module">
+    import { db } from './js/firebase-init.js';
+    import { collection, query, where, orderBy, limit, startAfter, getDocs } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+    import { initNav } from './js/nav.js';
+
+    initNav();
+
+    const tabTop = document.getElementById('tabTop');
+    const tabNew = document.getElementById('tabNew');
+    const loglineList = document.getElementById('loglineList');
+    const loadMoreBtn = document.getElementById('loadMoreBtn');
+    const statusMessage = document.getElementById('statusMessage');
+
+    const PAGE_SIZE = 20;
+    let currentTab = 'top'; // 'top' or 'new'
+    let lastVisibleDoc = null;
+    let isLoading = false;
+
+    function formatAvgScore(sum, count) {
+      if (!count || count === 0) return 'No ratings';
+      return (sum / count).toFixed(1);
+    }
+
+    function renderCard(docSnap) {
+      const data = docSnap.data();
+      const avg = formatAvgScore(data.ratingSum, data.ratingCount);
+      const isRanked = Boolean(data.isRanked);
+      const card = document.createElement('article');
+      card.className = 'logline-card';
+      card.innerHTML = `
+        <div class="card-meta">
+          <span class="badge badge-genre">${escapeHtml(data.genre || 'other')}</span>
+          <span class="badge badge-format">${escapeHtml(data.format || 'feature')}</span>
+          ${isRanked ? '<span class="badge badge-ranked" title="Ranked (10+ ratings)">★ Ranked</span>' : ''}
+        </div>
+        <h2 class="card-title">
+          <a href="logline.html?id=${encodeURIComponent(docSnap.id)}">${escapeHtml(data.title || 'Untitled')}</a>
+        </h2>
+        <div class="card-footer">
+          <div class="card-rating">
+            <span class="star-icon" aria-hidden="true">★</span>
+            <span class="score-value">${avg}</span>
+            <span class="count-value">(${data.ratingCount || 0} ${data.ratingCount === 1 ? 'rating' : 'ratings'})</span>
+          </div>
+          <a href="logline.html?id=${encodeURIComponent(docSnap.id)}" class="card-link" aria-label="View logline: ${escapeHtml(data.title)}">Read pitch &rarr;</a>
+        </div>
+      `;
+      return card;
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    async function loadLoglines(isInitial = false) {
+      if (isLoading) return;
+      isLoading = true;
+
+      if (isInitial) {
+        loglineList.innerHTML = '';
+        lastVisibleDoc = null;
+        loadMoreBtn.classList.add('hidden');
+        statusMessage.textContent = 'Loading loglines...';
+        statusMessage.className = 'status-box';
+      }
+
+      try {
+        let q;
+        const loglinesCol = collection(db, 'loglines');
+
+        if (currentTab === 'top') {
+          // Top tab: status == 'live', isRanked == true, orderBy weightedScore desc
+          if (lastVisibleDoc) {
+            q = query(
+              loglinesCol,
+              where('status', '==', 'live'),
+              where('isRanked', '==', true),
+              orderBy('weightedScore', 'desc'),
+              startAfter(lastVisibleDoc),
+              limit(PAGE_SIZE)
+            );
+          } else {
+            q = query(
+              loglinesCol,
+              where('status', '==', 'live'),
+              where('isRanked', '==', true),
+              orderBy('weightedScore', 'desc'),
+              limit(PAGE_SIZE)
+            );
+          }
+        } else {
+          // New tab: status == 'live', orderBy submittedAt desc
+          if (lastVisibleDoc) {
+            q = query(
+              loglinesCol,
+              where('status', '==', 'live'),
+              orderBy('submittedAt', 'desc'),
+              startAfter(lastVisibleDoc),
+              limit(PAGE_SIZE)
+            );
+          } else {
+            q = query(
+              loglinesCol,
+              where('status', '==', 'live'),
+              orderBy('submittedAt', 'desc'),
+              limit(PAGE_SIZE)
+            );
+          }
+        }
+
+        const snapshot = await getDocs(q);
+
+        if (isInitial) {
+          statusMessage.classList.add('hidden');
+          if (snapshot.empty) {
+            if (currentTab === 'top') {
+              statusMessage.textContent = 'No ranked loglines yet. Pitches become ranked after receiving at least 10 ratings!';
+            } else {
+              statusMessage.textContent = 'No loglines submitted yet. Be the first to post a pitch!';
+            }
+            statusMessage.className = 'status-box empty-state';
+            isLoading = false;
+            return;
+          }
+        }
+
+        snapshot.forEach(docSnap => {
+          loglineList.appendChild(renderCard(docSnap));
+        });
+
+        if (snapshot.docs.length > 0) {
+          lastVisibleDoc = snapshot.docs[snapshot.docs.length - 1];
+        }
+
+        if (snapshot.docs.length === PAGE_SIZE) {
+          loadMoreBtn.classList.remove('hidden');
+        } else {
+          loadMoreBtn.classList.add('hidden');
+        }
+      } catch (err) {
+        console.error('Error fetching loglines:', err);
+        statusMessage.textContent = 'Failed to load loglines. Please try again later.';
+        statusMessage.className = 'status-box error-state';
+      } finally {
+        isLoading = false;
+      }
+    }
+
+    tabTop.addEventListener('click', () => {
+      if (currentTab === 'top') return;
+      currentTab = 'top';
+      tabTop.classList.add('active');
+      tabTop.setAttribute('aria-selected', 'true');
+      tabNew.classList.remove('active');
+      tabNew.setAttribute('aria-selected', 'false');
+      loadLoglines(true);
+    });
+
+    tabNew.addEventListener('click', () => {
+      if (currentTab === 'new') return;
+      currentTab = 'new';
+      tabNew.classList.add('active');
+      tabNew.setAttribute('aria-selected', 'true');
+      tabTop.classList.remove('active');
+      tabTop.setAttribute('aria-selected', 'false');
+      loadLoglines(true);
+    });
+
+    loadMoreBtn.addEventListener('click', () => {
+      loadLoglines(false);
+    });
+
+    // Initial load
+    loadLoglines(true);
+  </script>
+</body>
+</html>

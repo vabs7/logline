@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Your Account - Cinerolls</title>
+  <meta name="description" content="Manage your movie loglines and writer profile on Cinerolls.">
+  <meta property="og:title" content="Your Account - Cinerolls">
+  <meta property="og:site_name" content="Cinerolls">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-container">
+      <a href="index.html" class="logo">
+        <span class="logo-mark">🎬</span>
+        <span class="logo-text">Cinerolls</span>
+      </a>
+      <nav class="site-nav" aria-label="Main Navigation">
+        <a href="submit.html" class="btn btn-primary">+ Submit Logline</a>
+        <div id="authNavSlot" class="auth-slot">
+          <a href="signin.html" class="btn btn-outline" id="authButton">Sign In</a>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <main class="site-main">
+    <div class="container account-container">
+      <div id="authRequiredNotice" class="status-box error-state hidden">
+        <h2>Sign In Required</h2>
+        <p>Please sign in with your email link to view your account dashboard.</p>
+        <p><a href="signin.html" class="btn btn-primary" style="margin-top: 0.75rem;">Sign In</a></p>
+      </div>
+
+      <div id="accountDashboard" class="hidden">
+        <div class="account-header">
+          <div>
+            <h1 class="page-title">Writer Dashboard</h1>
+            <p id="userEmailText" class="user-email-text"></p>
+          </div>
+          <button type="button" id="signOutBtn" class="btn btn-outline">Sign Out</button>
+        </div>
+
+        <!-- Optional Handle Section -->
+        <section class="card section-card">
+          <h2 class="card-heading">Display Handle</h2>
+          <p class="section-subtext">Optional handle shown on your loglines (3–20 letters, digits, or underscores).</p>
+          <form id="handleForm" class="inline-form" novalidate>
+            <div class="form-group flex-1">
+              <label for="handleInput">Handle</label>
+              <input
+                type="text"
+                id="handleInput"
+                name="handleInput"
+                class="form-input"
+                pattern="^[a-zA-Z0-9_]{3,20}$"
+                minlength="3"
+                maxlength="20"
+                placeholder="e.g. screen_writer_42"
+              >
+            </div>
+            <button type="submit" id="saveHandleBtn" class="btn btn-primary">Save Handle</button>
+          </form>
+          <div id="handleStatus" class="status-inline"></div>
+        </section>
+
+        <!-- User Loglines Section -->
+        <section class="loglines-section">
+          <div class="section-title-row">
+            <h2 class="card-heading">Your Pitches</h2>
+            <a href="submit.html" class="btn btn-outline btn-small">+ Submit New</a>
+          </div>
+
+          <div id="loglinesList" class="account-loglines-list">
+            <!-- Rendered dynamically -->
+          </div>
+          <div id="noLoglinesNotice" class="status-box empty-state hidden">
+            You haven't submitted any loglines yet. Ready to share a pitch?
+          </div>
+        </section>
+      </div>
+
+      <!-- Edit Body Dialog -->
+      <dialog id="editDialog" class="modal-dialog">
+        <form method="dialog" id="editForm" class="modal-content">
+          <h2 class="modal-title">Edit Logline Body</h2>
+          <p class="modal-desc">You can edit the body of your pitch within 24 hours of submission.</p>
+
+          <div class="form-group">
+            <label for="editBodyText">Logline Body (10–50 words) <span class="required" aria-hidden="true">*</span></label>
+            <textarea id="editBodyText" name="editBodyText" class="form-input" rows="4" required></textarea>
+            <div class="form-help-row">
+              <small class="form-help">Must remain between 10 and 50 words.</small>
+              <div id="editWordCounter" class="word-counter">Words: <strong id="editWordCountNum">0</strong> / 50 (min 10)</div>
+            </div>
+          </div>
+
+          <div id="editError" class="status-box error-state hidden"></div>
+
+          <div class="modal-actions">
+            <button type="button" id="cancelEditBtn" class="btn btn-outline">Cancel</button>
+            <button type="submit" id="confirmEditBtn" class="btn btn-primary">Save Changes</button>
+          </div>
+        </form>
+      </dialog>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-container">
+      <p class="copyright">&copy; Cinerolls. Writers retain all rights to their loglines.</p>
+      <div class="footer-links">
+        <a href="terms.html">Terms of Service</a>
+        <span aria-hidden="true">•</span>
+        <a href="privacy.html">Privacy Policy</a>
+      </div>
+    </div>
+  </footer>
+
+  <script type="module">
+    import { db, auth } from './js/firebase-init.js';
+    import {
+      doc,
+      getDoc,
+      setDoc,
+      updateDoc,
+      deleteDoc,
+      collection,
+      query,
+      where,
+      orderBy,
+      getDocs,
+      writeBatch,
+      serverTimestamp
+    } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+    import { onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
+    import { computeContentHash } from './js/hash.js';
+    import { initNav } from './js/nav.js';
+
+    initNav();
+
+    const authRequiredNotice = document.getElementById('authRequiredNotice');
+    const accountDashboard = document.getElementById('accountDashboard');
+    const userEmailText = document.getElementById('userEmailText');
+    const signOutBtn = document.getElementById('signOutBtn');
+
+    const handleForm = document.getElementById('handleForm');
+    const handleInput = document.getElementById('handleInput');
+    const saveHandleBtn = document.getElementById('saveHandleBtn');
+    const handleStatus = document.getElementById('handleStatus');
+
+    const loglinesList = document.getElementById('loglinesList');
+    const noLoglinesNotice = document.getElementById('noLoglinesNotice');
+
+    const editDialog = document.getElementById('editDialog');
+    const editForm = document.getElementById('editForm');
+    const editBodyText = document.getElementById('editBodyText');
+    const editWordCounter = document.getElementById('editWordCounter');
+    const editWordCountNum = document.getElementById('editWordCountNum');
+    const editError = document.getElementById('editError');
+    const cancelEditBtn = document.getElementById('cancelEditBtn');
+    const confirmEditBtn = document.getElementById('confirmEditBtn');
+
+    let currentEditingLoglineId = null;
+    let currentEditingOldHash = null;
+
+    onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        accountDashboard.classList.add('hidden');
+        authRequiredNotice.classList.remove('hidden');
+      } else {
+        authRequiredNotice.classList.add('hidden');
+        accountDashboard.classList.remove('hidden');
+        userEmailText.textContent = user.email || 'Anonymous / Guest';
+        await loadUserData(user.uid);
+        await loadUserLoglines(user.uid);
+      }
+    });
+
+    async function loadUserData(uid) {
+      try {
+        const userDoc = await getDoc(doc(db, 'users', uid));
+        if (userDoc.exists() && userDoc.data().handle) {
+          handleInput.value = userDoc.data().handle;
+        }
+      } catch (err) {
+        console.error('Error loading user data:', err);
+      }
+    }
+
+    handleForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const handle = handleInput.value.trim();
+      if (!/^[a-zA-Z0-9_]{3,20}$/.test(handle)) {
+        handleStatus.textContent = 'Handle must be 3–20 letters, digits, or underscores.';
+        handleStatus.className = 'status-inline error';
+        return;
+      }
+
+      saveHandleBtn.disabled = true;
+      handleStatus.textContent = 'Saving handle...';
+      handleStatus.className = 'status-inline';
+
+      try {
+        const userRef = doc(db, 'users', auth.currentUser.uid);
+        await setDoc(userRef, {
+          handle,
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+
+        handleStatus.textContent = 'Handle updated successfully!';
+        handleStatus.className = 'status-inline success';
+      } catch (err) {
+        console.error('Failed to set handle:', err);
+        handleStatus.textContent = err.message || 'Failed to update handle.';
+        handleStatus.className = 'status-inline error';
+      } finally {
+        saveHandleBtn.disabled = false;
+      }
+    });
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function countWords(str) {
+      if (!str) return 0;
+      return str.trim().split(/\s+/).filter(Boolean).length;
+    }
+
+    async function loadUserLoglines(uid) {
+      loglinesList.innerHTML = '<div class="status-box">Loading your loglines...</div>';
+      try {
+        const q = query(
+          collection(db, 'loglines'),
+          where('authorId', '==', uid),
+          orderBy('submittedAt', 'desc')
+        );
+        const snapshot = await getDocs(q);
+
+        if (snapshot.empty) {
+          loglinesList.innerHTML = '';
+          noLoglinesNotice.classList.remove('hidden');
+          return;
+        }
+
+        noLoglinesNotice.classList.add('hidden');
+        loglinesList.innerHTML = '';
+
+        const now = Date.now();
+
+        snapshot.forEach(docSnap => {
+          const d = docSnap.data();
+          const id = docSnap.id;
+          const avg = d.ratingCount > 0 ? (d.ratingSum / d.ratingCount).toFixed(1) : '-.-';
+          const editableUntilMs = d.editableUntil ? d.editableUntil.toMillis() : 0;
+          const canEdit = now <= editableUntilMs && d.status !== 'withdrawn';
+          const canWithdraw = d.status !== 'withdrawn';
+
+          const item = document.createElement('article');
+          item.className = 'account-logline-card';
+          item.innerHTML = `
+            <div class="account-card-header">
+              <div>
+                <span class="badge badge-status status-${escapeHtml(d.status)}">${escapeHtml(d.status.toUpperCase())}</span>
+                <span class="badge badge-genre">${escapeHtml(d.genre)}</span>
+                <span class="badge badge-format">${escapeHtml(d.format)}</span>
+              </div>
+              <div class="account-card-score">
+                ★ <strong>${avg}</strong> (${d.ratingCount || 0} ${d.ratingCount === 1 ? 'rating' : 'ratings'})
+              </div>
+            </div>
+            <h3 class="account-card-title">
+              <a href="logline.html?id=${encodeURIComponent(id)}">${escapeHtml(d.title)}</a>
+            </h3>
+            <p class="account-card-body">${escapeHtml(d.body)}</p>
+            <div class="account-card-actions">
+              ${canEdit ? `<button type="button" class="btn btn-outline btn-small edit-logline-btn" data-id="${id}" data-hash="${escapeHtml(d.contentHash || '')}" data-body="${escapeHtml(d.body)}">Edit Body</button>` : ''}
+              ${canWithdraw ? `<button type="button" class="btn btn-danger btn-small withdraw-logline-btn" data-id="${id}" data-hash="${escapeHtml(d.contentHash || '')}" data-title="${escapeHtml(d.title)}">Withdraw</button>` : ''}
+              <a href="logline.html?id=${encodeURIComponent(id)}" class="btn btn-text btn-small">View Pitch &rarr;</a>
+            </div>
+          `;
+          loglinesList.appendChild(item);
+        });
+
+        attachActionListeners();
+      } catch (err) {
+        console.error('Error loading loglines:', err);
+        loglinesList.innerHTML = '<div class="status-box error-state">Failed to load your submissions.</div>';
+      }
+    }
+
+    function attachActionListeners() {
+      // Edit button handlers
+      document.querySelectorAll('.edit-logline-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          currentEditingLoglineId = btn.dataset.id;
+          currentEditingOldHash = btn.dataset.hash;
+          editBodyText.value = btn.dataset.body;
+          updateEditWordCount();
+          editError.classList.add('hidden');
+          editDialog.showModal();
+        });
+      });
+
+      // Withdraw button handlers
+      document.querySelectorAll('.withdraw-logline-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const id = btn.dataset.id;
+          const oldHash = btn.dataset.hash;
+          const title = btn.dataset.title;
+          const confirmed = window.confirm(`Are you sure you want to withdraw "${title}"? This cannot be undone.`);
+          if (!confirmed) return;
+
+          btn.disabled = true;
+          try {
+            const batch = writeBatch(db);
+            const loglineRef = doc(db, 'loglines', id);
+            batch.update(loglineRef, {
+              status: 'withdrawn',
+              updatedAt: serverTimestamp()
+            });
+
+            // Delete hash document so text becomes available again
+            if (oldHash) {
+              const hashRef = doc(db, 'hashes', oldHash);
+              batch.delete(hashRef);
+            }
+
+            await batch.commit();
+            await loadUserLoglines(auth.currentUser.uid);
+          } catch (err) {
+            console.error('Withdraw error:', err);
+            alert(err.message || 'Failed to withdraw logline.');
+            btn.disabled = false;
+          }
+        });
+      });
+    }
+
+    function updateEditWordCount() {
+      const words = countWords(editBodyText.value);
+      editWordCountNum.textContent = words;
+      if (words < 10 || words > 50) {
+        editWordCounter.classList.add('invalid');
+      } else {
+        editWordCounter.classList.remove('invalid');
+      }
+    }
+
+    editBodyText.addEventListener('input', updateEditWordCount);
+
+    cancelEditBtn.addEventListener('click', () => {
+      editDialog.close();
+    });
+
+    editForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const newBody = editBodyText.value.trim();
+      const words = countWords(newBody);
+
+      if (words < 10 || words > 50) {
+        editError.textContent = `Logline body must be between 10 and 50 words (currently ${words}).`;
+        editError.classList.remove('hidden');
+        return;
+      }
+
+      confirmEditBtn.disabled = true;
+      confirmEditBtn.textContent = 'Saving...';
+
+      try {
+        const uid = auth.currentUser.uid;
+        const newHash = await computeContentHash(newBody);
+
+        // Check if newHash already exists
+        if (newHash !== currentEditingOldHash) {
+          const newHashSnap = await getDoc(doc(db, 'hashes', newHash));
+          if (newHashSnap.exists()) {
+            throw new Error('A logline with identical or near-identical text already exists on Cinerolls.');
+          }
+        }
+
+        // Get count of existing revisions to sequence next revision
+        const revsSnap = await getDocs(collection(db, 'loglines', currentEditingLoglineId, 'revisions'));
+        const nextRevNum = revsSnap.size + 1;
+
+        const batch = writeBatch(db);
+        const loglineRef = doc(db, 'loglines', currentEditingLoglineId);
+        const revRef = doc(collection(db, 'loglines', currentEditingLoglineId, 'revisions'), `rev_${nextRevNum}`);
+
+        // If hash changed, delete old hash and create new hash
+        if (currentEditingOldHash && currentEditingOldHash !== newHash) {
+          batch.delete(doc(db, 'hashes', currentEditingOldHash));
+          batch.set(doc(db, 'hashes', newHash), {
+            authorId: uid,
+            loglineId: currentEditingLoglineId,
+            createdAt: serverTimestamp()
+          });
+        }
+
+        // Append revision
+        batch.set(revRef, {
+          body: newBody,
+          savedAt: serverTimestamp(),
+          revisionNumber: nextRevNum
+        });
+
+        // Update logline
+        batch.update(loglineRef, {
+          body: newBody,
+          contentHash: newHash,
+          updatedAt: serverTimestamp()
+        });
+
+        await batch.commit();
+
+        editDialog.close();
+        await loadUserLoglines(auth.currentUser.uid);
+      } catch (err) {
+        console.error('Edit error:', err);
+        editError.textContent = err.message || 'Failed to update logline body.';
+        editError.classList.remove('hidden');
+      } finally {
+        confirmEditBtn.disabled = false;
+        confirmEditBtn.textContent = 'Save Changes';
+      }
+    });
+
+    signOutBtn.addEventListener('click', async () => {
+      await signOut(auth);
+      window.location.href = 'index.html';
+    });
+  </script>
+</body>
+</html>

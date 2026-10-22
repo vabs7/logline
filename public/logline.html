@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>View Logline - Cinerolls</title>
+  <meta name="description" content="Read and rate this movie logline pitch on Cinerolls.">
+  <meta property="og:title" content="View Logline - Cinerolls">
+  <meta property="og:site_name" content="Cinerolls">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-container">
+      <a href="index.html" class="logo">
+        <span class="logo-mark">🎬</span>
+        <span class="logo-text">Cinerolls</span>
+      </a>
+      <nav class="site-nav" aria-label="Main Navigation">
+        <a href="submit.html" class="btn btn-primary">+ Submit Logline</a>
+        <div id="authNavSlot" class="auth-slot">
+          <a href="signin.html" class="btn btn-outline" id="authButton">Sign In</a>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <main class="site-main">
+    <div class="container">
+      <div id="unavailableBox" class="status-box error-state hidden" role="alert">
+        <h2>This logline is no longer available.</h2>
+        <p>It may have been withdrawn by the author, removed by moderation, or does not exist.</p>
+        <p><a href="index.html" class="btn btn-outline" style="margin-top: 1rem;">Back to Loglines</a></p>
+      </div>
+
+      <div id="loadingBox" class="status-box" role="status">
+        Loading logline details...
+      </div>
+
+      <article id="loglineArticle" class="logline-detail-card hidden">
+        <header class="detail-header">
+          <div class="detail-meta">
+            <span id="detailGenre" class="badge badge-genre"></span>
+            <span id="detailFormat" class="badge badge-format"></span>
+            <span id="detailRanked" class="badge badge-ranked hidden">★ Ranked</span>
+          </div>
+          <h1 id="detailTitle" class="detail-title"></h1>
+        </header>
+
+        <section class="detail-pitch-section">
+          <h2 class="sr-only">The Pitch</h2>
+          <p id="detailBody" class="detail-body"></p>
+          <div id="detailComparablesWrapper" class="detail-comparables hidden">
+            <span class="comparables-label">Comparable films:</span>
+            <span id="detailComparables"></span>
+          </div>
+        </section>
+
+        <section class="score-summary-bar">
+          <div class="score-display">
+            <span class="score-star" aria-hidden="true">★</span>
+            <span id="detailAvgScore" class="score-number">-.-</span>
+            <span id="detailRatingCount" class="score-count">(0 ratings)</span>
+          </div>
+          <button type="button" id="openReportBtn" class="btn btn-text report-trigger">⚑ Report</button>
+        </section>
+
+        <!-- Rating Section (for non-authors) -->
+        <section id="ratingSection" class="detail-action-card">
+          <h2 class="section-heading">Would you watch this?</h2>
+          <p class="section-subtext">Rate this pitch on a 1 (Not Interested) to 5 (Must Watch) scale.</p>
+
+          <div id="authToRateNotice" class="auth-prompt-box hidden">
+            <p><a href="signin.html">Sign in</a> to rate this logline and help determine its score.</p>
+          </div>
+
+          <div id="ratingControlWrapper" class="rating-controls-wrapper">
+            <div class="rating-btn-group" role="group" aria-label="1 to 5 rating scale">
+              <button type="button" class="rating-btn" data-score="1" aria-label="1 star - Would not watch">1</button>
+              <button type="button" class="rating-btn" data-score="2" aria-label="2 stars - Unlikely to watch">2</button>
+              <button type="button" class="rating-btn" data-score="3" aria-label="3 stars - Neutral / Might watch">3</button>
+              <button type="button" class="rating-btn" data-score="4" aria-label="4 stars - Would watch">4</button>
+              <button type="button" class="rating-btn" data-score="5" aria-label="5 stars - Must watch">5</button>
+            </div>
+
+            <div class="rating-feedback-row">
+              <span id="currentRatingLabel" class="current-rating-label">Select a rating</span>
+            </div>
+
+            <div class="form-group" style="margin-top: 1rem;">
+              <label for="ratingReason">Why? Optional reason (max 140 chars):</label>
+              <textarea id="ratingReason" name="ratingReason" class="form-input" rows="2" maxlength="140" placeholder="What hooked you or what fell flat?"></textarea>
+              <div class="char-counter"><span id="reasonCharCount">0</span>/140</div>
+            </div>
+
+            <button type="button" id="saveRatingBtn" class="btn btn-primary" disabled>Save Rating</button>
+            <span id="ratingStatusText" class="status-inline"></span>
+          </div>
+        </section>
+
+        <!-- Author Notice (replaces rating control when viewing own logline) -->
+        <section id="authorNoticeSection" class="detail-action-card author-card hidden">
+          <h2 class="section-heading">Your Submission</h2>
+          <p>You are the author of this logline. Authors cannot rate their own pitches.</p>
+          <p><a href="account.html" class="btn btn-outline" style="margin-top: 0.5rem;">Manage in Account</a></p>
+        </section>
+
+        <!-- Author Feedback Section (Reasons left by audience) -->
+        <section id="authorFeedbackSection" class="detail-action-card hidden">
+          <h2 class="section-heading">Audience Feedback</h2>
+          <p class="section-subtext">Reasons provided by readers who rated your logline:</p>
+          <div id="feedbackList" class="feedback-list">
+            <!-- Rendered dynamically -->
+          </div>
+        </section>
+
+        <!-- Verified Outcomes Section -->
+        <section id="outcomesSection" class="detail-action-card outcomes-card hidden">
+          <h2 class="section-heading">Verified Industry Outcomes</h2>
+          <div id="outcomesList" class="outcomes-list">
+            <!-- Rendered dynamically -->
+          </div>
+        </section>
+      </article>
+
+      <!-- Report Modal -->
+      <dialog id="reportDialog" class="modal-dialog">
+        <form method="dialog" id="reportForm" class="modal-content">
+          <h2 class="modal-title">Report Logline</h2>
+          <p class="modal-desc">Help us maintain quality. Reports are reviewed by administrators.</p>
+
+          <div class="form-group">
+            <label for="reportReasonSelect">Reason for report:</label>
+            <select id="reportReasonSelect" name="reportReasonSelect" class="form-input" required>
+              <option value="spam">Spam</option>
+              <option value="duplicate">Duplicate pitch</option>
+              <option value="abusive">Abusive or offensive content</option>
+              <option value="ip_claim">IP Claim / Copyright infringement</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+
+          <div class="modal-actions">
+            <button type="button" id="cancelReportBtn" class="btn btn-outline">Cancel</button>
+            <button type="submit" id="submitReportBtn" class="btn btn-danger">Submit Report</button>
+          </div>
+          <div id="reportStatus" class="status-inline" style="margin-top: 0.75rem;"></div>
+        </form>
+      </dialog>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-container">
+      <p class="copyright">&copy; Cinerolls. Writers retain all rights to their loglines.</p>
+      <div class="footer-links">
+        <a href="terms.html">Terms of Service</a>
+        <span aria-hidden="true">•</span>
+        <a href="privacy.html">Privacy Policy</a>
+      </div>
+    </div>
+  </footer>
+
+  <script type="module">
+    import { db, auth } from './js/firebase-init.js';
+    import {
+      doc,
+      getDoc,
+      setDoc,
+      collection,
+      query,
+      where,
+      orderBy,
+      getDocs,
+      runTransaction,
+      serverTimestamp
+    } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+    import { onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
+    import { initNav } from './js/nav.js';
+
+    initNav();
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const loglineId = urlParams.get('id');
+
+    const loadingBox = document.getElementById('loadingBox');
+    const unavailableBox = document.getElementById('unavailableBox');
+    const loglineArticle = document.getElementById('loglineArticle');
+
+    const detailTitle = document.getElementById('detailTitle');
+    const detailGenre = document.getElementById('detailGenre');
+    const detailFormat = document.getElementById('detailFormat');
+    const detailRanked = document.getElementById('detailRanked');
+    const detailBody = document.getElementById('detailBody');
+    const detailComparablesWrapper = document.getElementById('detailComparablesWrapper');
+    const detailComparables = document.getElementById('detailComparables');
+    const detailAvgScore = document.getElementById('detailAvgScore');
+    const detailRatingCount = document.getElementById('detailRatingCount');
+
+    const ratingSection = document.getElementById('ratingSection');
+    const authorNoticeSection = document.getElementById('authorNoticeSection');
+    const authorFeedbackSection = document.getElementById('authorFeedbackSection');
+    const feedbackList = document.getElementById('feedbackList');
+    const authToRateNotice = document.getElementById('authToRateNotice');
+    const ratingControlWrapper = document.getElementById('ratingControlWrapper');
+    const ratingButtons = document.querySelectorAll('.rating-btn');
+    const currentRatingLabel = document.getElementById('currentRatingLabel');
+    const ratingReason = document.getElementById('ratingReason');
+    const reasonCharCount = document.getElementById('reasonCharCount');
+    const saveRatingBtn = document.getElementById('saveRatingBtn');
+    const ratingStatusText = document.getElementById('ratingStatusText');
+
+    const outcomesSection = document.getElementById('outcomesSection');
+    const outcomesList = document.getElementById('outcomesList');
+
+    const openReportBtn = document.getElementById('openReportBtn');
+    const reportDialog = document.getElementById('reportDialog');
+    const reportForm = document.getElementById('reportForm');
+    const cancelReportBtn = document.getElementById('cancelReportBtn');
+    const reportReasonSelect = document.getElementById('reportReasonSelect');
+    const reportStatus = document.getElementById('reportStatus');
+
+    let currentLogline = null;
+    let currentUser = null;
+    let selectedScore = null;
+    let existingRating = null;
+
+    if (!loglineId) {
+      showUnavailable();
+    } else {
+      loadData();
+    }
+
+    function showUnavailable() {
+      loadingBox.classList.add('hidden');
+      loglineArticle.classList.add('hidden');
+      unavailableBox.classList.remove('hidden');
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    async function loadData() {
+      try {
+        const loglineDocRef = doc(db, 'loglines', loglineId);
+        const loglineSnap = await getDoc(loglineDocRef);
+
+        if (!loglineSnap.exists()) {
+          showUnavailable();
+          return;
+        }
+
+        const data = loglineSnap.data();
+
+        // If not live, verify if user can see it (author or admin)
+        if (data.status !== 'live') {
+          if (!auth.currentUser || (auth.currentUser.uid !== data.authorId)) {
+            showUnavailable();
+            return;
+          }
+        }
+
+        currentLogline = data;
+        renderLogline(data);
+        await loadOutcomes();
+
+        // Listen for Auth changes to handle rating permissions & existing ratings
+        onAuthStateChanged(auth, async (user) => {
+          currentUser = user;
+          await handleUserRoleAndRating();
+        });
+      } catch (err) {
+        console.error('Error fetching logline:', err);
+        showUnavailable();
+      }
+    }
+
+    function renderLogline(data) {
+      loadingBox.classList.add('hidden');
+      loglineArticle.classList.remove('hidden');
+
+      detailTitle.textContent = data.title || 'Untitled';
+      detailGenre.textContent = data.genre || 'other';
+      detailFormat.textContent = data.format || 'feature';
+      detailBody.textContent = data.body || '';
+
+      if (data.isRanked) {
+        detailRanked.classList.remove('hidden');
+      } else {
+        detailRanked.classList.add('hidden');
+      }
+
+      if (data.comparables && data.comparables.trim()) {
+        detailComparables.textContent = data.comparables.trim();
+        detailComparablesWrapper.classList.remove('hidden');
+      }
+
+      const count = data.ratingCount || 0;
+      const sum = data.ratingSum || 0;
+      const avg = count > 0 ? (sum / count).toFixed(1) : '-.-';
+
+      detailAvgScore.textContent = avg;
+      detailRatingCount.textContent = `(${count} ${count === 1 ? 'rating' : 'ratings'})`;
+    }
+
+    async function handleUserRoleAndRating() {
+      if (!currentLogline) return;
+
+      const isAuthor = currentUser && currentUser.uid === currentLogline.authorId;
+
+      if (isAuthor) {
+        // Author cannot rate
+        ratingSection.classList.add('hidden');
+        authorNoticeSection.classList.remove('hidden');
+        await loadAuthorFeedback();
+        return;
+      }
+
+      authorNoticeSection.classList.add('hidden');
+      authorFeedbackSection.classList.add('hidden');
+      ratingSection.classList.remove('hidden');
+
+      if (!currentUser) {
+        authToRateNotice.classList.remove('hidden');
+        ratingControlWrapper.classList.add('opacity-disabled');
+        saveRatingBtn.disabled = true;
+        return;
+      }
+
+      authToRateNotice.classList.add('hidden');
+      ratingControlWrapper.classList.remove('opacity-disabled');
+
+      // Fetch user's existing rating
+      try {
+        const ratingDocRef = doc(db, 'loglines', loglineId, 'ratings', currentUser.uid);
+        const ratingSnap = await getDoc(ratingDocRef);
+
+        if (ratingSnap.exists()) {
+          existingRating = ratingSnap.data();
+          selectedScore = existingRating.score;
+          highlightScoreButton(selectedScore);
+          currentRatingLabel.textContent = `Your current rating: ${selectedScore} / 5 stars`;
+          saveRatingBtn.textContent = 'Update Rating';
+          saveRatingBtn.disabled = false;
+
+          if (existingRating.reason) {
+            ratingReason.value = existingRating.reason;
+            reasonCharCount.textContent = existingRating.reason.length;
+          }
+        } else {
+          currentRatingLabel.textContent = 'Select a rating';
+          saveRatingBtn.textContent = 'Save Rating';
+          saveRatingBtn.disabled = true;
+        }
+      } catch (e) {
+        console.error('Error fetching rating:', e);
+      }
+    }
+
+    async function loadAuthorFeedback() {
+      try {
+        const ratingsQuery = query(collection(db, 'loglines', loglineId, 'ratings'), orderBy('updatedAt', 'desc'));
+        const ratingsSnap = await getDocs(ratingsQuery);
+
+        const reasons = [];
+        ratingsSnap.forEach(r => {
+          const d = r.data();
+          if (d.reason && d.reason.trim()) {
+            reasons.push(d);
+          }
+        });
+
+        if (reasons.length > 0) {
+          feedbackList.innerHTML = reasons.map(r => `
+            <div class="feedback-item">
+              <div class="feedback-score">Rating: <strong>${r.score}★</strong></div>
+              <blockquote class="feedback-quote">"${escapeHtml(r.reason)}"</blockquote>
+            </div>
+          `).join('');
+          authorFeedbackSection.classList.remove('hidden');
+        } else {
+          feedbackList.innerHTML = '<p class="text-muted">No written feedback has been left yet.</p>';
+          authorFeedbackSection.classList.remove('hidden');
+        }
+      } catch (err) {
+        console.warn('Could not load feedback:', err);
+      }
+    }
+
+    async function loadOutcomes() {
+      try {
+        const q = query(
+          collection(db, 'outcomes'),
+          where('loglineId', '==', loglineId),
+          where('verified', '==', true),
+          orderBy('recordedAt', 'desc')
+        );
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          outcomesList.innerHTML = snap.docs.map(docSnap => {
+            const o = docSnap.data();
+            const formattedStage = (o.stage || '').replace(/_/g, ' ').toUpperCase();
+            return `
+              <div class="outcome-card">
+                <span class="badge badge-outcome">${escapeHtml(formattedStage)}</span>
+                <strong class="outcome-title">${escapeHtml(o.relatedTitle || '')}</strong>
+                <a href="${escapeHtml(o.evidenceUrl)}" target="_blank" rel="noopener noreferrer" class="evidence-link">Evidence Link &nearr;</a>
+              </div>
+            `;
+          }).join('');
+          outcomesSection.classList.remove('hidden');
+        }
+      } catch (err) {
+        console.error('Error fetching outcomes:', err);
+      }
+    }
+
+    function highlightScoreButton(score) {
+      ratingButtons.forEach(btn => {
+        if (Number(btn.dataset.score) === score) {
+          btn.classList.add('selected');
+          btn.setAttribute('aria-pressed', 'true');
+        } else {
+          btn.classList.remove('selected');
+          btn.setAttribute('aria-pressed', 'false');
+        }
+      });
+    }
+
+    ratingButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (!currentUser) {
+          window.location.href = 'signin.html';
+          return;
+        }
+        selectedScore = Number(btn.dataset.score);
+        highlightScoreButton(selectedScore);
+        currentRatingLabel.textContent = `Rating: ${selectedScore} / 5 stars`;
+        saveRatingBtn.disabled = false;
+      });
+    });
+
+    ratingReason.addEventListener('input', () => {
+      reasonCharCount.textContent = ratingReason.value.length;
+    });
+
+    saveRatingBtn.addEventListener('click', async () => {
+      if (!selectedScore || !currentUser) return;
+
+      saveRatingBtn.disabled = true;
+      ratingStatusText.textContent = 'Saving...';
+      ratingStatusText.className = 'status-inline';
+
+      try {
+        const loglineRef = doc(db, 'loglines', loglineId);
+        const ratingRef = doc(db, 'loglines', loglineId, 'ratings', currentUser.uid);
+
+        let txResult;
+        await runTransaction(db, async (tx) => {
+          const loglineSnap = await tx.get(loglineRef);
+          if (!loglineSnap.exists()) throw new Error('Logline not found.');
+
+          const logline = loglineSnap.data();
+          if (logline.status !== 'live') throw new Error('Cannot rate a logline that is not live.');
+          if (logline.authorId === currentUser.uid) throw new Error('Authors cannot rate their own loglines.');
+
+          const ratingSnap = await tx.get(ratingRef);
+          const isNew = !ratingSnap.exists();
+          let newCount = logline.ratingCount || 0;
+          let newSum = logline.ratingSum || 0;
+
+          if (isNew) {
+            newCount += 1;
+            newSum += selectedScore;
+          } else {
+            const oldScore = ratingSnap.data().score;
+            newSum += (selectedScore - oldScore);
+          }
+
+          // Fixed prior formula: (ratingSum + 30) / (ratingCount + 10)
+          const weightedScore = (newSum + 30.0) / (newCount + 10.0);
+          const isRanked = newCount >= 10;
+
+          tx.set(ratingRef, {
+            score: selectedScore,
+            reason: ratingReason.value.trim().slice(0, 140) || null,
+            createdAt: isNew ? serverTimestamp() : (ratingSnap.data().createdAt || serverTimestamp()),
+            updatedAt: serverTimestamp()
+          });
+
+          tx.update(loglineRef, {
+            ratingCount: newCount,
+            ratingSum: newSum,
+            weightedScore,
+            isRanked,
+            updatedAt: serverTimestamp()
+          });
+
+          txResult = { ratingCount: newCount, ratingSum: newSum, weightedScore, isRanked };
+        });
+
+        ratingStatusText.textContent = 'Saved!';
+        ratingStatusText.className = 'status-inline success';
+        saveRatingBtn.textContent = 'Update Rating';
+        saveRatingBtn.disabled = false;
+
+        // Update score display locally
+        const newCount = txResult.ratingCount;
+        const newSum = txResult.ratingSum;
+        const newAvg = (newSum / newCount).toFixed(1);
+        detailAvgScore.textContent = newAvg;
+        detailRatingCount.textContent = `(${newCount} ${newCount === 1 ? 'rating' : 'ratings'})`;
+        if (txResult.isRanked) {
+          detailRanked.classList.remove('hidden');
+        }
+      } catch (err) {
+        console.error('Rating failed:', err);
+        ratingStatusText.textContent = err.message || 'Failed to save rating.';
+        ratingStatusText.className = 'status-inline error';
+        saveRatingBtn.disabled = false;
+      }
+    });
+
+    // Report handling
+    openReportBtn.addEventListener('click', () => {
+      if (!auth.currentUser) {
+        window.location.href = 'signin.html';
+        return;
+      }
+      reportStatus.textContent = '';
+      reportDialog.showModal();
+    });
+
+    cancelReportBtn.addEventListener('click', () => {
+      reportDialog.close();
+    });
+
+    reportForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const reason = reportReasonSelect.value;
+      const submitBtn = document.getElementById('submitReportBtn');
+      submitBtn.disabled = true;
+      reportStatus.textContent = 'Submitting report...';
+      reportStatus.className = 'status-inline';
+
+      try {
+        const reportRef = doc(db, 'loglines', loglineId, 'reports', auth.currentUser.uid);
+        await setDoc(reportRef, {
+          reason,
+          createdAt: serverTimestamp(),
+          loglineId
+        });
+
+        reportStatus.textContent = 'Report received. Thank you for keeping Cinerolls safe.';
+        reportStatus.className = 'status-inline success';
+
+        setTimeout(() => {
+          reportDialog.close();
+          submitBtn.disabled = false;
+        }, 1500);
+      } catch (err) {
+        console.error('Report error:', err);
+        reportStatus.textContent = err.message || 'Failed to submit report.';
+        reportStatus.className = 'status-inline error';
+        submitBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

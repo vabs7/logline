@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy - Cinerolls</title>
+  <meta name="description" content="Privacy Policy for Cinerolls movie loglines platform. No ads, no third-party trackers.">
+  <meta property="og:title" content="Privacy Policy - Cinerolls">
+  <meta property="og:site_name" content="Cinerolls">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-container">
+      <a href="index.html" class="logo">
+        <span class="logo-mark">🎬</span>
+        <span class="logo-text">Cinerolls</span>
+      </a>
+      <nav class="site-nav" aria-label="Main Navigation">
+        <a href="submit.html" class="btn btn-primary">+ Submit Logline</a>
+        <div id="authNavSlot" class="auth-slot">
+          <a href="signin.html" class="btn btn-outline" id="authButton">Sign In</a>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <main class="site-main">
+    <div class="container text-page-container">
+      <div class="draft-banner">
+        <strong>DRAFT: to be reviewed by a lawyer.</strong>
+      </div>
+
+      <article class="prose">
+        <h1>Privacy Policy</h1>
+        <p class="last-updated">Last Updated: October 2026</p>
+
+        <h2>1. Information We Collect</h2>
+        <p>Cinerolls is built with minimal data collection principles in mind. We collect only what is strictly necessary to authenticate users, prevent spam, and maintain platform integrity:</p>
+        <ul>
+          <li><strong>Email Address:</strong> Collected strictly through Firebase Authentication for email link passwordless sign-in. Your email proves control over your account.</li>
+          <li><strong>Display Handle:</strong> An optional 3–20 character pseudonym you may set in your dashboard for display purposes.</li>
+          <li><strong>Timestamps:</strong> Account creation timestamp, logline submission and revision timestamps, rating timestamps, and a <code>lastSubmitAt</code> timestamp used strictly to enforce the 10-minute submission throttle.</li>
+        </ul>
+
+        <h2>2. What We Do NOT Collect or Do</h2>
+        <ul>
+          <li><strong>No Full Scripts:</strong> We store loglines only, never full scripts, screenplays, or treatments.</li>
+          <li><strong>No Advertisements:</strong> Cinerolls does not serve commercial third-party ads.</li>
+          <li><strong>No Third-Party Trackers:</strong> We do not embed marketing trackers, tracking pixels, behavioral telemetry, or social network surveillance scripts.</li>
+          <li><strong>No Sale of Data:</strong> We never sell, rent, or monetize your personal information or contact details.</li>
+        </ul>
+
+        <h2>3. Data Storage &amp; Security</h2>
+        <p>All data is stored directly in Google Cloud / Firebase Firestore databases located in secure data centers. Client writes and reads are strictly governed by granular Firestore security rules enforcing user ownership, author privileges, rating formulas, and administrative permissions without requiring server-side compute.</p>
+
+        <h2>4. Contact &amp; Deletion</h2>
+        <p>If you wish to delete your account or withdraw submissions, you may do so directly through your account dashboard or by contacting the site administrator.</p>
+      </article>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-container">
+      <p class="copyright">&copy; Cinerolls. Writers retain all rights to their loglines.</p>
+      <div class="footer-links">
+        <a href="terms.html">Terms of Service</a>
+        <span aria-hidden="true">•</span>
+        <a href="privacy.html">Privacy Policy</a>
+      </div>
+    </div>
+  </footer>
+
+  <script type="module">
+    import { initNav } from './js/nav.js';
+    initNav();
+  </script>
+</body>
+</html>

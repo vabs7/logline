@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign In - Cinerolls</title>
+  <meta name="description" content="Sign in to Cinerolls using a secure email link. Passwordless and instant.">
+  <meta property="og:title" content="Sign In - Cinerolls">
+  <meta property="og:site_name" content="Cinerolls">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-container">
+      <a href="index.html" class="logo">
+        <span class="logo-mark">🎬</span>
+        <span class="logo-text">Cinerolls</span>
+      </a>
+      <nav class="site-nav" aria-label="Main Navigation">
+        <a href="submit.html" class="btn btn-primary">+ Submit Logline</a>
+        <div id="authNavSlot" class="auth-slot">
+          <a href="signin.html" class="btn btn-outline active" id="authButton">Sign In</a>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <main class="site-main">
+    <div class="container form-page-container">
+      <div class="page-header">
+        <h1 class="page-title">Sign In with Email Link</h1>
+        <p class="page-subtitle">No password required. We'll send a secure sign-in link directly to your inbox.</p>
+      </div>
+
+      <!-- Completing sign-in progress box -->
+      <div id="completingBox" class="status-box hidden" role="status">
+        <h2>Signing you in...</h2>
+        <p>Verifying your secure sign-in link. You will be redirected shortly.</p>
+      </div>
+
+      <!-- Already signed in box -->
+      <div id="alreadySignedInBox" class="card section-card hidden">
+        <h2>You are currently signed in</h2>
+        <p id="currentUserDisplay" class="section-subtext"></p>
+        <div class="form-actions" style="margin-top: 1.5rem;">
+          <a href="account.html" class="btn btn-primary">Go to Account</a>
+          <button type="button" id="signOutCurrentBtn" class="btn btn-outline">Sign Out</button>
+        </div>
+      </div>
+
+      <!-- Send link form -->
+      <div id="sendLinkFormCard" class="card section-card">
+        <form id="emailSignInForm" novalidate>
+          <div class="form-group">
+            <label for="userEmailInput">Your Email Address <span class="required" aria-hidden="true">*</span></label>
+            <input
+              type="email"
+              id="userEmailInput"
+              name="userEmailInput"
+              class="form-input"
+              required
+              autocomplete="email"
+              placeholder="writer@example.com"
+              aria-describedby="emailHelp"
+            >
+            <small id="emailHelp" class="form-help">Email link verification proves control of your address. We never send spam.</small>
+          </div>
+
+          <div id="authStatusMessage" class="status-box hidden" role="alert"></div>
+
+          <div class="form-actions">
+            <button type="submit" id="sendLinkBtn" class="btn btn-primary btn-large">Send Sign-In Link</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-container">
+      <p class="copyright">&copy; Cinerolls. Writers retain all rights to their loglines.</p>
+      <div class="footer-links">
+        <a href="terms.html">Terms of Service</a>
+        <span aria-hidden="true">•</span>
+        <a href="privacy.html">Privacy Policy</a>
+      </div>
+    </div>
+  </footer>
+
+  <script type="module">
+    import { auth, db } from './js/firebase-init.js';
+    import {
+      sendSignInLinkToEmail,
+      isSignInWithEmailLink,
+      signInWithEmailLink,
+      onAuthStateChanged,
+      signOut
+    } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
+    import { doc, getDoc, setDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+    import { initNav } from './js/nav.js';
+
+    initNav();
+
+    const completingBox = document.getElementById('completingBox');
+    const alreadySignedInBox = document.getElementById('alreadySignedInBox');
+    const currentUserDisplay = document.getElementById('currentUserDisplay');
+    const signOutCurrentBtn = document.getElementById('signOutCurrentBtn');
+    const sendLinkFormCard = document.getElementById('sendLinkFormCard');
+    const emailSignInForm = document.getElementById('emailSignInForm');
+    const userEmailInput = document.getElementById('userEmailInput');
+    const sendLinkBtn = document.getElementById('sendLinkBtn');
+    const authStatusMessage = document.getElementById('authStatusMessage');
+
+    async function ensureUserDoc(uid) {
+      try {
+        const userRef = doc(db, 'users', uid);
+        const userSnap = await getDoc(userRef);
+        if (!userSnap.exists()) {
+          await setDoc(userRef, {
+            status: 'active',
+            createdAt: serverTimestamp(),
+            handle: null,
+            lastSubmitAt: null
+          });
+        }
+      } catch (err) {
+        console.warn('Could not initialize user doc:', err);
+      }
+    }
+
+    // 1. Check if returning from email link
+    if (isSignInWithEmailLink(auth, window.location.href)) {
+      sendLinkFormCard.classList.add('hidden');
+      alreadySignedInBox.classList.add('hidden');
+      completingBox.classList.remove('hidden');
+
+      let email = window.localStorage.getItem('emailForSignIn');
+
+      if (!email) {
+        email = window.prompt('Please confirm your email address to complete sign-in:');
+      }
+
+      if (email) {
+        signInWithEmailLink(auth, email.trim(), window.location.href)
+          .then(async (credential) => {
+            window.localStorage.removeItem('emailForSignIn');
+            if (credential.user) {
+              await ensureUserDoc(credential.user.uid);
+            }
+            completingBox.innerHTML = `
+              <h2 style="color: var(--color-success);">Sign-in Successful!</h2>
+              <p>Redirecting to your dashboard...</p>
+            `;
+            setTimeout(() => {
+              window.location.href = 'account.html';
+            }, 1000);
+          })
+          .catch((err) => {
+            console.error('Sign-in error:', err);
+            completingBox.className = 'status-box error-state';
+            completingBox.innerHTML = `
+              <h2>Sign-in Failed</h2>
+              <p>${err.message || 'The sign-in link is invalid or expired. Please request a new one.'}</p>
+              <p><a href="signin.html" class="btn btn-primary" style="margin-top: 0.75rem;">Try Again</a></p>
+            `;
+          });
+      } else {
+        completingBox.className = 'status-box error-state';
+        completingBox.innerHTML = `
+          <h2>Email Required</h2>
+          <p>Email verification was not provided.</p>
+          <p><a href="signin.html" class="btn btn-primary" style="margin-top: 0.75rem;">Try Again</a></p>
+        `;
+      }
+    } else {
+      // 2. Normal visit: check existing auth
+      onAuthStateChanged(auth, async (user) => {
+        if (user) {
+          currentUserDisplay.textContent = `Signed in as ${user.email || user.uid}`;
+          alreadySignedInBox.classList.remove('hidden');
+          sendLinkFormCard.classList.add('hidden');
+          await ensureUserDoc(user.uid);
+        } else {
+          alreadySignedInBox.classList.add('hidden');
+          sendLinkFormCard.classList.remove('hidden');
+        }
+      });
+    }
+
+    // 3. Send email sign-in link form
+    emailSignInForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = userEmailInput.value.trim();
+
+      if (!email || !email.includes('@')) {
+        showStatus('Please enter a valid email address.', 'error');
+        return;
+      }
+
+      sendLinkBtn.disabled = true;
+      sendLinkBtn.textContent = 'Sending Link...';
+      authStatusMessage.classList.add('hidden');
+
+      const actionCodeSettings = {
+        url: window.location.href.split('?')[0].split('#')[0],
+        handleCodeInApp: true
+      };
+
+      try {
+        await sendSignInLinkToEmail(auth, email, actionCodeSettings);
+        window.localStorage.setItem('emailForSignIn', email);
+
+        showStatus(
+          `A sign-in link has been sent to <strong>${email}</strong>. Check your inbox (and spam folder) and click the link to complete sign-in.`,
+          'success'
+        );
+        emailSignInForm.reset();
+      } catch (err) {
+        console.error('Send sign-in link error:', err);
+        showStatus(err.message || 'Failed to send sign-in link. Please try again.', 'error');
+      } finally {
+        sendLinkBtn.disabled = false;
+        sendLinkBtn.textContent = 'Send Sign-In Link';
+      }
+    });
+
+    function showStatus(html, type) {
+      authStatusMessage.innerHTML = html;
+      authStatusMessage.className = `status-box ${type === 'error' ? 'error-state' : 'success-state'}`;
+      authStatusMessage.classList.remove('hidden');
+    }
+
+    signOutCurrentBtn.addEventListener('click', async () => {
+      await signOut(auth);
+      alreadySignedInBox.classList.add('hidden');
+      sendLinkFormCard.classList.remove('hidden');
+    });
+  </script>
+</body>
+</html>

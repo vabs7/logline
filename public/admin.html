@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Dashboard - Cinerolls</title>
+  <meta name="description" content="Cinerolls administrative moderation and outcome recording portal.">
+  <meta property="og:title" content="Admin Dashboard - Cinerolls">
+  <meta property="og:site_name" content="Cinerolls">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-container">
+      <a href="index.html" class="logo">
+        <span class="logo-mark">🎬</span>
+        <span class="logo-text">Cinerolls</span>
+      </a>
+      <nav class="site-nav" aria-label="Main Navigation">
+        <a href="submit.html" class="btn btn-primary">+ Submit Logline</a>
+        <div id="authNavSlot" class="auth-slot">
+          <a href="signin.html" class="btn btn-outline" id="authButton">Sign In</a>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <main class="site-main">
+    <div class="container admin-container">
+      <div id="accessDeniedNotice" class="status-box error-state hidden">
+        <h2>Access Denied</h2>
+        <p>This portal is restricted to system administrators with an authorized <code>admins/{uid}</code> document.</p>
+        <p><a href="index.html" class="btn btn-outline" style="margin-top: 0.75rem;">Return to Homepage</a></p>
+      </div>
+
+      <div id="adminPanel" class="hidden">
+        <div class="page-header">
+          <h1 class="page-title">Moderation &amp; Administration</h1>
+          <p class="page-subtitle">Review flagged content, moderation queues, and record verified industry outcomes.</p>
+        </div>
+
+        <!-- Section 1: All Reports Collection Group Queue -->
+        <section class="admin-section">
+          <div class="section-title-row">
+            <h2 class="card-heading">Recent Reports (Collection Group)</h2>
+            <button type="button" id="refreshReportsBtn" class="btn btn-outline btn-small">Refresh Reports</button>
+          </div>
+          <div id="reportsQueueList" class="hidden-queue-list">
+            <!-- Rendered dynamically -->
+          </div>
+          <div id="noReportsNotice" class="status-box empty-state hidden">
+            No reports currently logged.
+          </div>
+        </section>
+
+        <!-- Section 2: Hidden Loglines Moderation Queue -->
+        <section class="admin-section">
+          <div class="section-title-row">
+            <h2 class="card-heading">Hidden Loglines</h2>
+            <button type="button" id="refreshQueueBtn" class="btn btn-outline btn-small">Refresh Queue</button>
+          </div>
+          <div id="hiddenQueueList" class="hidden-queue-list">
+            <!-- Rendered dynamically -->
+          </div>
+          <div id="noHiddenNotice" class="status-box empty-state hidden">
+            No hidden loglines currently in the moderation queue.
+          </div>
+        </section>
+
+        <!-- Section 3: Add Verified Outcome -->
+        <section class="admin-section">
+          <div class="card section-card">
+            <h2 class="card-heading">Record Verified Industry Outcome</h2>
+            <p class="section-subtext">Add public industry milestones (options, sales, production) to loglines.</p>
+
+            <form id="addOutcomeForm" class="submission-form" novalidate>
+              <div class="form-group">
+                <label for="outcomeLoglineId">Logline ID <span class="required" aria-hidden="true">*</span></label>
+                <input
+                  type="text"
+                  id="outcomeLoglineId"
+                  name="outcomeLoglineId"
+                  class="form-input"
+                  required
+                  placeholder="e.g. jf82Kls92kd"
+                >
+              </div>
+
+              <div class="form-row">
+                <div class="form-group flex-1">
+                  <label for="outcomeStage">Stage <span class="required" aria-hidden="true">*</span></label>
+                  <select id="outcomeStage" name="outcomeStage" class="form-input" required>
+                    <option value="" disabled selected>Select industry stage...</option>
+                    <option value="optioned">Optioned</option>
+                    <option value="in_development">In Development</option>
+                    <option value="sold">Sold</option>
+                    <option value="produced">Produced</option>
+                    <option value="abandoned">Abandoned</option>
+                  </select>
+                </div>
+
+                <div class="form-group flex-1">
+                  <label for="outcomeRelatedTitle">Related Project Title <span class="required" aria-hidden="true">*</span></label>
+                  <input
+                    type="text"
+                    id="outcomeRelatedTitle"
+                    name="outcomeRelatedTitle"
+                    class="form-input"
+                    required
+                    placeholder="e.g. Official Movie Title / Working Title"
+                  >
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label for="outcomeEvidenceUrl">Evidence URL <span class="required" aria-hidden="true">*</span></label>
+                <input
+                  type="url"
+                  id="outcomeEvidenceUrl"
+                  name="outcomeEvidenceUrl"
+                  class="form-input"
+                  required
+                  placeholder="https://deadline.com/... or https://variety.com/..."
+                >
+                <small class="form-help">Must be a valid URL pointing to public trade or contract verification.</small>
+              </div>
+
+              <div id="outcomeStatus" class="status-inline"></div>
+
+              <div class="form-actions" style="margin-top: 1rem;">
+                <button type="submit" id="saveOutcomeBtn" class="btn btn-primary">Add Verified Outcome</button>
+              </div>
+            </form>
+          </div>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-container">
+      <p class="copyright">&copy; Cinerolls. Writers retain all rights to their loglines.</p>
+      <div class="footer-links">
+        <a href="terms.html">Terms of Service</a>
+        <span aria-hidden="true">•</span>
+        <a href="privacy.html">Privacy Policy</a>
+      </div>
+    </div>
+  </footer>
+
+  <script type="module">
+    import { db, auth } from './js/firebase-init.js';
+    import {
+      doc,
+      getDoc,
+      updateDoc,
+      addDoc,
+      collection,
+      collectionGroup,
+      query,
+      where,
+      orderBy,
+      getDocs,
+      serverTimestamp
+    } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+    import { onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
+    import { initNav } from './js/nav.js';
+
+    initNav();
+
+    const accessDeniedNotice = document.getElementById('accessDeniedNotice');
+    const adminPanel = document.getElementById('adminPanel');
+
+    const reportsQueueList = document.getElementById('reportsQueueList');
+    const noReportsNotice = document.getElementById('noReportsNotice');
+    const refreshReportsBtn = document.getElementById('refreshReportsBtn');
+
+    const hiddenQueueList = document.getElementById('hiddenQueueList');
+    const noHiddenNotice = document.getElementById('noHiddenNotice');
+    const refreshQueueBtn = document.getElementById('refreshQueueBtn');
+
+    const addOutcomeForm = document.getElementById('addOutcomeForm');
+    const outcomeLoglineId = document.getElementById('outcomeLoglineId');
+    const outcomeStage = document.getElementById('outcomeStage');
+    const outcomeRelatedTitle = document.getElementById('outcomeRelatedTitle');
+    const outcomeEvidenceUrl = document.getElementById('outcomeEvidenceUrl');
+    const outcomeStatus = document.getElementById('outcomeStatus');
+    const saveOutcomeBtn = document.getElementById('saveOutcomeBtn');
+
+    onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        showAccessDenied();
+        return;
+      }
+
+      try {
+        const adminDocRef = doc(db, 'admins', user.uid);
+        const adminDocSnap = await getDoc(adminDocRef);
+
+        if (adminDocSnap.exists()) {
+          accessDeniedNotice.classList.add('hidden');
+          adminPanel.classList.remove('hidden');
+          await Promise.all([loadReportsQueue(), loadHiddenQueue()]);
+        } else {
+          showAccessDenied();
+        }
+      } catch (err) {
+        console.error('Error verifying admin authorization:', err);
+        showAccessDenied();
+      }
+    });
+
+    function showAccessDenied() {
+      adminPanel.classList.add('hidden');
+      accessDeniedNotice.classList.remove('hidden');
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    async function loadReportsQueue() {
+      reportsQueueList.innerHTML = '<div class="status-box">Loading reports...</div>';
+      try {
+        // Collection group query for reports, ordered by createdAt desc
+        const q = query(
+          collectionGroup(db, 'reports'),
+          orderBy('createdAt', 'desc')
+        );
+        const snap = await getDocs(q);
+
+        if (snap.empty) {
+          reportsQueueList.innerHTML = '';
+          noReportsNotice.classList.remove('hidden');
+          return;
+        }
+
+        noReportsNotice.classList.add('hidden');
+        reportsQueueList.innerHTML = '';
+
+        snap.forEach(reportDoc => {
+          const r = reportDoc.data();
+          const reporterUid = reportDoc.id;
+          // Parent logline doc path: loglines/{id}/reports/{uid}
+          const parentLoglineId = r.loglineId || reportDoc.ref.parent.parent.id;
+
+          const item = document.createElement('article');
+          item.className = 'admin-queue-card';
+          item.innerHTML = `
+            <div class="admin-card-header">
+              <div>
+                <span class="badge badge-status status-hidden">REPORT: ${escapeHtml(r.reason || 'other')}</span>
+              </div>
+              <div class="text-muted">Reporter: <code>${escapeHtml(reporterUid)}</code></div>
+            </div>
+            <div style="margin-top: 0.5rem;">
+              <strong>Logline ID:</strong> <code>${escapeHtml(parentLoglineId)}</code>
+              &nbsp;&bull;&nbsp;
+              <a href="logline.html?id=${encodeURIComponent(parentLoglineId)}" class="card-link" target="_blank" rel="noopener">Inspect Pitch &rarr;</a>
+            </div>
+            <div class="admin-card-actions" style="margin-top: 0.75rem;">
+              <button type="button" class="btn btn-outline btn-small hide-logline-btn" data-id="${escapeHtml(parentLoglineId)}">Set Status to Hidden</button>
+              <button type="button" class="btn btn-danger btn-small withdraw-logline-admin-btn" data-id="${escapeHtml(parentLoglineId)}">Set Status to Withdrawn</button>
+            </div>
+          `;
+          reportsQueueList.appendChild(item);
+        });
+
+        attachReportActionListeners();
+      } catch (err) {
+        console.error('Error loading reports queue:', err);
+        reportsQueueList.innerHTML = `<div class="status-box error-state">Failed to load reports: ${err.message}</div>`;
+      }
+    }
+
+    function attachReportActionListeners() {
+      document.querySelectorAll('.hide-logline-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const loglineId = btn.dataset.id;
+          btn.disabled = true;
+          try {
+            await updateDoc(doc(db, 'loglines', loglineId), {
+              status: 'hidden',
+              updatedAt: serverTimestamp()
+            });
+            alert('Logline status updated to hidden.');
+            await Promise.all([loadReportsQueue(), loadHiddenQueue()]);
+          } catch (e) {
+            alert('Failed: ' + e.message);
+            btn.disabled = false;
+          }
+        });
+      });
+
+      document.querySelectorAll('.withdraw-logline-admin-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const loglineId = btn.dataset.id;
+          btn.disabled = true;
+          try {
+            await updateDoc(doc(db, 'loglines', loglineId), {
+              status: 'withdrawn',
+              updatedAt: serverTimestamp()
+            });
+            alert('Logline status updated to withdrawn.');
+            await Promise.all([loadReportsQueue(), loadHiddenQueue()]);
+          } catch (e) {
+            alert('Failed: ' + e.message);
+            btn.disabled = false;
+          }
+        });
+      });
+    }
+
+    async function loadHiddenQueue() {
+      hiddenQueueList.innerHTML = '<div class="status-box">Loading hidden queue...</div>';
+      try {
+        const q = query(
+          collection(db, 'loglines'),
+          where('status', '==', 'hidden'),
+          orderBy('submittedAt', 'desc')
+        );
+        const snapshot = await getDocs(q);
+
+        if (snapshot.empty) {
+          hiddenQueueList.innerHTML = '';
+          noHiddenNotice.classList.remove('hidden');
+          return;
+        }
+
+        noHiddenNotice.classList.add('hidden');
+        hiddenQueueList.innerHTML = '';
+
+        for (const docSnap of snapshot.docs) {
+          const data = docSnap.data();
+          const loglineId = docSnap.id;
+
+          const item = document.createElement('article');
+          item.className = 'admin-queue-card';
+          item.innerHTML = `
+            <div class="admin-card-header">
+              <div>
+                <span class="badge badge-status status-hidden">HIDDEN</span>
+                <span class="badge badge-genre">${escapeHtml(data.genre)}</span>
+                <span class="badge badge-format">${escapeHtml(data.format)}</span>
+              </div>
+              <div class="text-muted">Author ID: <code>${escapeHtml(data.authorId)}</code></div>
+            </div>
+            <h3 class="admin-card-title">${escapeHtml(data.title)}</h3>
+            <p class="admin-card-body">${escapeHtml(data.body)}</p>
+            <div class="admin-card-actions">
+              <button type="button" class="btn btn-outline btn-small restore-btn" data-id="${loglineId}">Restore (Set Live)</button>
+              <button type="button" class="btn btn-danger btn-small remove-btn" data-id="${loglineId}">Remove (Set Withdrawn)</button>
+            </div>
+          `;
+          hiddenQueueList.appendChild(item);
+        }
+
+        attachModerationListeners();
+      } catch (err) {
+        console.error('Error fetching hidden queue:', err);
+        hiddenQueueList.innerHTML = `<div class="status-box error-state">Failed to load moderation queue: ${err.message}</div>`;
+      }
+    }
+
+    function attachModerationListeners() {
+      document.querySelectorAll('.restore-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const loglineId = btn.dataset.id;
+          btn.disabled = true;
+          try {
+            await updateDoc(doc(db, 'loglines', loglineId), {
+              status: 'live',
+              updatedAt: serverTimestamp()
+            });
+            await loadHiddenQueue();
+          } catch (err) {
+            console.error('Restore error:', err);
+            alert(err.message || 'Failed to restore logline.');
+            btn.disabled = false;
+          }
+        });
+      });
+
+      document.querySelectorAll('.remove-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const loglineId = btn.dataset.id;
+          btn.disabled = true;
+          try {
+            await updateDoc(doc(db, 'loglines', loglineId), {
+              status: 'withdrawn',
+              updatedAt: serverTimestamp()
+            });
+            await loadHiddenQueue();
+          } catch (err) {
+            console.error('Remove error:', err);
+            alert(err.message || 'Failed to remove logline.');
+            btn.disabled = false;
+          }
+        });
+      });
+    }
+
+    refreshQueueBtn.addEventListener('click', loadHiddenQueue);
+    refreshReportsBtn.addEventListener('click', loadReportsQueue);
+
+    // Add Outcome handler
+    addOutcomeForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const loglineId = outcomeLoglineId.value.trim();
+      const stage = outcomeStage.value;
+      const relatedTitle = outcomeRelatedTitle.value.trim();
+      const evidenceUrl = outcomeEvidenceUrl.value.trim();
+
+      if (!loglineId || !stage || !relatedTitle || !evidenceUrl) {
+        outcomeStatus.textContent = 'Please fill out all outcome fields.';
+        outcomeStatus.className = 'status-inline error';
+        return;
+      }
+
+      saveOutcomeBtn.disabled = true;
+      outcomeStatus.textContent = 'Saving outcome...';
+      outcomeStatus.className = 'status-inline';
+
+      try {
+        await addDoc(collection(db, 'outcomes'), {
+          loglineId,
+          stage,
+          relatedTitle,
+          evidenceUrl,
+          verified: true,
+          recordedAt: serverTimestamp()
+        });
+
+        outcomeStatus.textContent = 'Outcome recorded and verified successfully!';
+        outcomeStatus.className = 'status-inline success';
+        addOutcomeForm.reset();
+      } catch (err) {
+        console.error('Outcome error:', err);
+        outcomeStatus.textContent = err.message || 'Failed to record outcome.';
+        outcomeStatus.className = 'status-inline error';
+      } finally {
+        saveOutcomeBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
